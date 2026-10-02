@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0a0a0a;
+  --color-coal: #141414;
+  --color-panel: #1a1a1a;
+  --color-line: #2c2a24;
+  --color-gold: #d4af37;
+  --color-gold-soft: #f0d77a;
+  --color-gold-deep: #9c7a1a;
+  --color-bone: #f5efdc;
+  --color-mute: #a39d8a;
+  --font-display: var(--font-cinzel), "Trajan Pro", Georgia, serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+}
+
+html { color-scheme: dark; }
+body { background: var(--color-ink); color: var(--color-bone); font-family: var(--font-sans); }
+::selection { background: var(--color-gold); color: #000; }
+
+.btn-gold {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  background: linear-gradient(135deg, var(--color-gold-soft), var(--color-gold) 50%, var(--color-gold-deep));
+  color: #0a0a0a; font-weight: 600; padding: .75rem 1.5rem; border-radius: .25rem;
+  letter-spacing: .04em; transition: filter .15s, transform .15s; cursor: pointer;
+}
+.btn-gold:hover { filter: brightness(1.1); }
+.btn-gold:disabled { opacity: .5; cursor: not-allowed; }
+.btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  border: 1px solid var(--color-gold); color: var(--color-gold); padding: .7rem 1.4rem;
+  border-radius: .25rem; letter-spacing: .04em; transition: background .15s; cursor: pointer;
+}
+.btn-ghost:hover { background: rgba(212,175,55,.1); }
+.input {
+  width: 100%; background: var(--color-coal); border: 1px solid var(--color-line);
+  border-radius: .25rem; padding: .7rem .9rem; color: var(--color-bone);
+}
+.input:focus { outline: none; border-color: var(--color-gold); }
+.gold-text {
+  background: linear-gradient(135deg, var(--color-gold-soft), var(--color-gold), var(--color-gold-deep));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+/* Headings: Cinzel (inscriptional roman serif); body: Inter. */
+.font-display { font-weight: 700; letter-spacing: .04em; }
+h1.font-display, h2.font-display { letter-spacing: .06em; text-wrap: balance; }

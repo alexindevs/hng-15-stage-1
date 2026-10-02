@@ -1,0 +1,14 @@
+[
+  {"slug":"toyota-camry-2019","name":"Toyota Camry SE 2019","category":"Cars","price_kobo":2800000000,"stock":2,"description":"Foreign-used (Tokunbo) Camry SE, automatic, 2.5L, clean title, leather interior, reverse camera. Full inspection report on request."},
+  {"slug":"lexus-es350-2018","name":"Lexus ES 350 2018","category":"Cars","price_kobo":3200000000,"stock":1,"description":"Foreign-used ES 350 in black, sunroof, heated seats, low mileage, accident-free."},
+  {"slug":"honda-accord-2017","name":"Honda Accord Sport 2017","category":"Cars","price_kobo":1800000000,"stock":3,"description":"Nigerian-used Accord Sport, automatic, excellent fuel economy, all documents complete."},
+  {"slug":"mercedes-c300-2017","name":"Mercedes-Benz C300 2017","category":"Cars","price_kobo":3500000000,"stock":1,"description":"4MATIC C300, black on black, panoramic roof, Burmester audio, full service history."},
+  {"slug":"toyota-highlander-2018","name":"Toyota Highlander XLE 2018","category":"SUVs & Trucks","price_kobo":3800000000,"stock":2,"description":"Three-row Highlander XLE, V6, leather seats, ideal for family and business use."},
+  {"slug":"lexus-rx350-2016","name":"Lexus RX 350 2016","category":"SUVs & Trucks","price_kobo":2900000000,"stock":2,"description":"Foreign-used RX 350, AWD, navigation, clean interior and a smooth ride."},
+  {"slug":"toyota-hilux-2020","name":"Toyota Hilux 4x4 2020","category":"SUVs & Trucks","price_kobo":4500000000,"stock":1,"description":"Double-cab Hilux 4x4, diesel, rugged and ready for work or the open road."},
+  {"slug":"honda-cg125","name":"Honda CG 125 Motorcycle","category":"Motorcycles","price_kobo":145000000,"stock":10,"description":"Reliable, fuel-efficient commuter bike. Brand new, with registration support."},
+  {"slug":"bajaj-boxer-150","name":"Bajaj Boxer 150","category":"Motorcycles","price_kobo":110000000,"stock":12,"description":"Tough and affordable workhorse for daily trips and deliveries. Brand new."},
+  {"slug":"tvs-apache-160","name":"TVS Apache RTR 160","category":"Motorcycles","price_kobo":180000000,"stock":6,"description":"Sporty 160cc street bike with disc brakes and a digital console."},
+  {"slug":"yamaha-mt07-2021","name":"Yamaha MT-07 2021","category":"Motorcycles","price_kobo":950000000,"stock":1,"description":"Foreign-used 689cc naked sport bike, low mileage, black and gold custom finish."},
+  {"slug":"mountain-bike-275","name":"Mountain Bike 27.5\"","category":"Bicycles","price_kobo":35000000,"stock":15,"description":"21-speed aluminium-frame mountain bike with front suspension and disc brakes."}
+]
