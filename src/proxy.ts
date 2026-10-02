@@ -1,13 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { publishableKey, supabaseConfigured, supabaseUrl } from "@/lib/supabase/env";
 
 // Next 16 "proxy" (formerly middleware): keeps the Supabase auth session fresh.
 export async function proxy(request: NextRequest) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  if (!supabaseConfigured()) {
     return NextResponse.next();
   }
   let response = NextResponse.next({ request });
-  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+  const supabase = createServerClient(supabaseUrl()!, publishableKey()!, {
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll(list) {
@@ -17,7 +18,7 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
-  await supabase.auth.getUser();
+  await supabase.auth.getClaims(); // refreshes an expiring session; verifies the JWT (docs: prefer over getUser here)
   return response;
 }
 

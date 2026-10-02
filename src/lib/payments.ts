@@ -53,8 +53,9 @@ export async function settlePaystackPayment(paystackReference: string): Promise<
 
   const v = await verifyTransaction(paystackReference);
   if (!v || v.status !== "success") return false;
-  if (v.currency !== "NGN" || Number(v.amount) !== Number(order.total_kobo)) {
-    console.error("[paystack] amount/currency mismatch", paystackReference, v.amount, v.currency, order.total_kobo);
+  const paidKobo = Number(v.requested_amount ?? v.amount);
+  if (v.currency !== "NGN" || paidKobo !== Number(order.total_kobo)) {
+    console.error("[paystack] amount/currency mismatch", paystackReference, paidKobo, v.currency, order.total_kobo);
     return false;
   }
 

@@ -27,7 +27,7 @@ E-commerce site for **Ego Olisa Enterprises** (HNG15 Lesson 2, Task 1), a seller
 - `src/app/auth/*` — OAuth callback and signout. `src/app/login` — Google button.
 
 ## Rules / conventions
-- Never trust client-sent prices or totals. Order writes happen only server-side with the service-role key (`SUPABASE_SERVICE_ROLE_KEY`); the `server-only` import guards `admin.ts`.
+- Never trust client-sent prices or totals. Order writes happen only server-side with the Supabase secret key (`SUPABASE_SECRET_KEY`; legacy `SUPABASE_SERVICE_ROLE_KEY` still works); the `server-only` import guards `admin.ts`.
 - Never commit `.env*` (gitignored). Add any new variable to `.env.example`.
 - Payment methods: `paystack`, `bank_transfer`, `pay_on_delivery`. Paystack orders are only emailed/confirmed after verified payment; the Paystack option hides itself when `PAYSTACK_SECRET_KEY` is unset.
 - Money is integer kobo everywhere (DB columns are `bigint`: a car exceeds int4 kobo); format with `formatNaira`.
