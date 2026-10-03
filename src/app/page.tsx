@@ -9,7 +9,7 @@ export default async function Home() {
     <>
       <section className="relative overflow-hidden border border-line px-6 py-24 text-center bg-[radial-gradient(ellipse_at_top,#2a2412,#0a0a0a_70%)]">
         <p className="text-xs uppercase tracking-[0.4em] text-gold-deep">Cars · SUVs · Motorcycles</p>
-        <h1 className="font-display mx-auto mt-4 max-w-3xl text-5xl leading-tight md:text-7xl">
+        <h1 className="font-display mx-auto mt-4 max-w-3xl text-4xl leading-tight sm:text-5xl md:text-7xl">
           <span className="gold-text">{SHOP_NAME}</span>
         </h1>
         <p className="mx-auto mt-6 max-w-xl text-mute">
