@@ -54,7 +54,7 @@ export function FilterBar({ categories }: { categories: string[] }) {
 
   return (
     <div className="space-y-5">
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 text-sm">
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 text-sm">
         {["", ...categories].map((c) => (
           <Link
             key={c || "all"}

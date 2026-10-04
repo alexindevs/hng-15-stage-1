@@ -5,7 +5,7 @@ import { verifyTransaction } from "./paystack";
 import { emailEsc as esc, emailShell, EMAIL_COLORS as C, EMAIL_SANS as SANS, sendMail } from "./mailgun";
 import { formatNaira, SHOP_NAME, siteUrl } from "./format";
 import { formatSlot, HORIZON_DAYS, slotKey } from "./booking";
-import { CONTACT, FEE_POLICY } from "./site";
+import { bankDetails, CONTACT, FEE_POLICY } from "./site";
 
 /** slotKey -> number of active (pending/confirmed) bookings, for the booking page. */
 export async function loadBookedCounts(): Promise<Record<string, number>> {
@@ -34,7 +34,13 @@ function renderBookingEmail(b: BookingRow) {
   const feeLine =
     b.fee_kobo <= 0 ? "No inspection fee."
     : b.fee_status === "paid" ? `Inspection fee of ${formatNaira(b.fee_kobo)} received. Thank you.`
+    : b.fee_option === "bank_transfer" ? `Inspection fee of ${formatNaira(b.fee_kobo)}: please pay by bank transfer using ${b.reference} as the payment reference (details below). We will note it once it arrives.`
     : `Inspection fee of ${formatNaira(b.fee_kobo)} is payable at the viewing.`;
+  const bank = bankDetails();
+  const bankLines = b.fee_option === "bank_transfer" && b.fee_status !== "paid" && b.fee_kobo > 0
+    ? (bank ? [`Bank: ${bank.bank}`, `Account name: ${bank.name}`, `Account number: ${bank.number}`, `Amount: ${formatNaira(b.fee_kobo)}`, `Reference: ${b.reference}`] : ["We will send you our account details shortly."])
+    : [];
+  const bankBlock = bankLines.length ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px"><tr><td width="4" bgcolor="${C.gold}" style="background:${C.gold}">&nbsp;</td><td style="padding:14px 16px" bgcolor="${C.ink}"><div style="font:11px ${SANS};letter-spacing:3px;color:${C.gold};margin-bottom:6px">PAY BY BANK TRANSFER</div><div style="font:14px/1.7 ${SANS};color:${C.bone}">${bankLines.map(esc).join("<br>")}</div></td></tr></table>` : "";
   const policy = b.fee_kobo > 0 ? ` ${FEE_POLICY}` : "";
   const row = (k: string, v: string) =>
     `<tr><td style="padding:8px 0;border-bottom:1px solid ${C.line};font:13px ${SANS};color:${C.mute}">${k}</td><td align="right" style="padding:8px 0;border-bottom:1px solid ${C.line};font:15px ${SANS};color:${C.bone}">${esc(v)}</td></tr>`;
@@ -45,13 +51,13 @@ function renderBookingEmail(b: BookingRow) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 ${row("Reference", b.reference)}${row("Vehicle", b.product_name)}${row("Date and time", `${slot} (Lagos time)`)}${row("Status", "Pending approval")}
 </table>
-<p style="margin:16px 0 0;font:14px/1.6 ${SANS};color:${C.bone}">${esc(feeLine + policy)}</p>`,
+<p style="margin:16px 0 0;font:14px/1.6 ${SANS};color:${C.bone}">${esc(feeLine + policy)}</p>${bankBlock}`,
     ctaLabel: "View booking",
     ctaUrl: `${siteUrl()}/booking/${encodeURIComponent(b.reference)}`,
   });
   const text =
     `${SHOP_NAME}\n\nViewing requested. Reference ${b.reference}\nVehicle: ${b.product_name}\nWhen: ${slot} (Lagos time)\n` +
-    `Status: pending approval\n${feeLine}${policy}\n\n${siteUrl()}/booking/${b.reference}\n`;
+    `Status: pending approval\n${feeLine}${policy}\n${bankLines.length ? "\n" + bankLines.join("\n") + "\n" : ""}\n${siteUrl()}/booking/${b.reference}\n`;
   return { html, text, slot };
 }
 

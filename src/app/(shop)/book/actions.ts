@@ -16,7 +16,7 @@ const schema = z.object({
   email: z.string().trim().email("Enter a valid email"),
   phone: z.string().trim().min(7, "Enter a phone number"),
   notes: z.string().trim().max(500).optional(),
-  feeOption: z.enum(["pay_now", "at_viewing"]),
+  feeOption: z.enum(["pay_now", "bank_transfer", "at_viewing"]),
 });
 
 export type BookingResult =
@@ -65,7 +65,8 @@ export async function createBooking(input: z.input<typeof schema>): Promise<Book
   const { data: bookingId, error } = await admin.rpc("place_booking", {
     p_user_id: userId, p_product_id: product.id, p_name: d.name, p_email: d.email, p_phone: d.phone,
     p_slot: new Date(d.slot).toISOString(), p_notes: d.notes ?? null, p_reference: reference,
-    p_fee_kobo: fee, p_fee_option: payNow ? "pay_now" : "at_viewing", p_capacity: slotCapacity(),
+    p_fee_kobo: fee, p_capacity: slotCapacity(),
+    p_fee_option: fee <= 0 ? "at_viewing" : d.feeOption,
   });
   if (error) {
     if (error.message.includes("SLOT_FULL")) return { ok: false, error: "Sorry, that slot has just been taken. Please pick another time." };

@@ -5,10 +5,11 @@ import { createClient } from "@/lib/supabase/client";
 import { formatNaira } from "@/lib/format";
 import { slotKey, type Day } from "@/lib/booking";
 import { FEE_POLICY } from "@/lib/site";
+import { ScrollRow } from "@/components/ScrollRow";
 import { createBooking } from "@/app/(shop)/book/actions";
 
 type Vehicle = { slug: string; name: string };
-type FeeOption = "pay_now" | "at_viewing";
+type FeeOption = "pay_now" | "bank_transfer" | "at_viewing";
 
 export function BookingForm({
   vehicles, initialSlug, days, booked, capacity, feeKobo, paystack,
@@ -73,7 +74,8 @@ export function BookingForm({
         <section>
           <p className={step}>02</p>
           <h2 className="font-display mt-1 text-2xl">Pick a date and time</h2>
-          <div className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-2" role="tablist" aria-label="Date">
+          <div className="-mx-4 mt-4 md:mx-0">
+          <ScrollRow className="px-4 md:px-0" role="tablist" aria-label="Date" prevLabel="Earlier dates" nextLabel="Later dates">
             {days.map((d) => (
               <button
                 key={d.date}
@@ -86,6 +88,7 @@ export function BookingForm({
                 {d.label}
               </button>
             ))}
+          </ScrollRow>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Time">
             {day?.slots.map((s) => {
@@ -131,10 +134,11 @@ export function BookingForm({
           <section>
             <p className={step}>04</p>
             <h2 className="font-display mt-1 text-2xl">Inspection fee</h2>
-            <p className="mt-2 text-sm text-mute">A {formatNaira(feeKobo)} inspection fee applies to each viewing. Pay it now or at the viewing. <strong className="text-bone">{FEE_POLICY}</strong></p>
+            <p className="mt-2 text-sm text-mute">A {formatNaira(feeKobo)} inspection fee applies to each viewing. Pay it now by bank transfer{canPayNow ? " or Paystack" : ""}, or at the viewing. <strong className="text-bone">{FEE_POLICY}</strong></p>
             <fieldset className="mt-4 space-y-2">
               {([
-                ...(canPayNow ? [["pay_now", `Pay ${formatNaira(feeKobo)} now`, "Securely with Paystack (card, bank transfer or USSD)."]] : []),
+                ...(canPayNow ? [["pay_now", `Pay ${formatNaira(feeKobo)} now with Paystack`, "Card, bank transfer or USSD, processed securely by Paystack."]] : []),
+                ["bank_transfer", `Pay ${formatNaira(feeKobo)} now by bank transfer`, "We email you our account details and your booking reference to use as the payment reference."],
                 ["at_viewing", "Pay at the viewing", "Settle the fee when you arrive."],
               ] as [FeeOption, string, string][]).map(([v, title, hint]) => (
                 <label key={v} className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${feeOption === v ? "border-gold bg-gold/5" : "border-line"}`}>
@@ -153,7 +157,7 @@ export function BookingForm({
           <div><dt className="eyebrow">Vehicle</dt><dd className="mt-1">{vehicles.find((v) => v.slug === slug)?.name}</dd></div>
           <div><dt className="eyebrow">When</dt>
             <dd className="mt-1">{slot ? `${days.find((d) => d.slots.some((s) => s.iso === slot))?.label}, ${days.flatMap((d) => d.slots).find((s) => s.iso === slot)?.label}` : "Not chosen yet"}</dd></div>
-          {feeKobo > 0 && <div><dt className="eyebrow">Inspection fee</dt><dd className="mt-1 text-gold">{formatNaira(feeKobo)} <span className="text-mute">({feeOption === "pay_now" ? "pay now" : "at viewing"})</span></dd></div>}
+          {feeKobo > 0 && <div><dt className="eyebrow">Inspection fee</dt><dd className="mt-1 text-gold">{formatNaira(feeKobo)} <span className="text-mute">({feeOption === "pay_now" ? "pay now, Paystack" : feeOption === "bank_transfer" ? "pay now, bank transfer" : "at viewing"})</span></dd></div>}
         </dl>
         <p className="mt-5 text-xs leading-relaxed text-mute">
           Your request is held while we confirm it. You will get an email once it is approved.{feeKobo > 0 && <> {FEE_POLICY}</>}

@@ -45,6 +45,10 @@ body { background: var(--color-ink); color: var(--color-bone); font-family: var(
 
 }
 
+/* Horizontal scrollers (date tabs, filter pills, thumbnails): scrollable by touch, wheel or drag, no visible bar. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* Flat gold (kept as a class name because older pages use it). */
 .gold-text { color: var(--color-gold); }
 

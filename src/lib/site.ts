@@ -25,3 +25,9 @@ export const slotCapacity = () => {
 
 /** Shown wherever the inspection fee is mentioned. */
 export const FEE_POLICY = "The inspection fee is non-refundable.";
+
+/** Bank account for transfers (orders and inspection fees). Null until BANK_* env vars are set. Server-side only. */
+export const bankDetails = () => {
+  const bank = process.env.BANK_NAME, name = process.env.BANK_ACCOUNT_NAME, number = process.env.BANK_ACCOUNT_NUMBER;
+  return bank && name && number ? { bank, name, number } : null;
+};

@@ -224,3 +224,10 @@ grant execute on function public.place_booking to service_role;
 --   method POST, URL https://<your-domain>/api/bookings/status,
 --   HTTP header  x-webhook-secret: <same value as BOOKING_WEBHOOK_SECRET in the app's env>.
 alter table public.bookings add column if not exists status_notified text;  -- last status the customer was emailed about
+
+-- ---------- inspection fee by bank transfer ----------
+-- fee_option now also allows 'bank_transfer': the customer pays the inspection fee by transfer using the
+-- booking reference. Until the admin area exists, staff mark it received by setting fee_status = 'paid'.
+alter table public.bookings drop constraint if exists bookings_fee_option_check;
+alter table public.bookings add constraint bookings_fee_option_check
+  check (fee_option in ('pay_now','at_viewing','bank_transfer'));
