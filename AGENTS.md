@@ -20,11 +20,14 @@ E-commerce site for **Ego Olisa Enterprises** (HNG15 Lesson 2, Task 1), a seller
 - `supabase/schema.sql` — tables, RLS policies, `place_order()` RPC (atomic stock check + order insert). `supabase/seed.sql` — placeholder catalogue.
 - `src/lib/catalog.json` — placeholder products; also the **fallback** catalogue when Supabase env vars are absent (so the UI previews without creds).
 - `src/lib/supabase/{client,server,admin,env}.ts` — browser / server (cookies) / service-role clients. `src/proxy.ts` refreshes the auth session (Next 16 renamed middleware to proxy).
-- `src/app/checkout/actions.ts` — server action `placeOrder`: validates, re-reads prices from the DB, calls `place_order`, then sends the Mailgun email.
+- `src/app/(shop)/checkout/actions.ts` — server action `placeOrder`: validates, re-reads prices from the DB, calls `place_order`, then sends the Mailgun email.
 - `src/lib/payments.ts` — `settlePaystackPayment(ref)`: server-side verify with Paystack, check amount == order total and NGN, flip `unpaid -> paid` once, then email. Called from the order page (return from Paystack) and `src/app/api/paystack/webhook/route.ts` (HMAC-SHA512 `x-paystack-signature`). Idempotent.
 - `src/lib/mailgun.ts` — black/gold table-based HTML email with a payment block per method.
 - `src/components/CartProvider.tsx` — cart in React context + localStorage (`eo-cart-v1`). Cart stores slugs only; the server never trusts client prices.
-- `src/app/auth/*` — OAuth callback and signout. `src/app/login` — Google button.
+- `src/app/auth/*` — OAuth callback and signout. `src/app/(shop)/login` — Google button.
+- Viewing bookings: `src/lib/booking.ts` (pure slot rules, shared with the client form), `src/lib/bookings.ts` (server: availability, emails, fee settlement), `src/app/(shop)/book/*`, `src/app/(shop)/booking/[reference]`, SQL `place_booking()`. Paystack references starting `BK-` are bookings, all others are orders (see the webhook route).
+- Route groups: `src/app/(site)` full-bleed landing pages; `src/app/(shop)` inner pages inside a centred container (URLs unchanged). Nav links: `src/lib/nav.ts`.
+- Images: `scripts/process-images.mjs` and `scripts/process-cutouts.mjs` build `public/vehicles/` from `assets-originals/` and `assets-cutouts/`. Never edit the originals.
 
 ## Rules / conventions
 - Never trust client-sent prices or totals. Order writes happen only server-side with the Supabase secret key (`SUPABASE_SECRET_KEY`; legacy `SUPABASE_SERVICE_ROLE_KEY` still works); the `server-only` import guards `admin.ts`.
@@ -32,7 +35,7 @@ E-commerce site for **Ego Olisa Enterprises** (HNG15 Lesson 2, Task 1), a seller
 - Payment methods: `paystack`, `bank_transfer`, `pay_on_delivery`. Paystack orders are only emailed/confirmed after verified payment; the Paystack option hides itself when `PAYSTACK_SECRET_KEY` is unset.
 - Money is integer kobo everywhere (DB columns are `bigint`: a car exceeds int4 kobo); format with `formatNaira`.
 - Email failure must not fail the order (order is already persisted); `orders.email_sent_at` records success.
-- Fonts: Cinzel (`font-display`) for headings, Inter for body text. Keep the black/gold palette: use the Tailwind tokens (`gold`, `ink`, `panel`, `line`, `bone`, `mute`), not ad-hoc colours.
+- Fonts: Archivo (`font-display`) for headings, Inter for body text. Keep the black/gold/off-white palette: use the Tailwind tokens (`gold`, `ink`, `panel`, `line`, `bone`, `mute`, `paper`), not ad-hoc colours.
 - Next 16 specifics: `params` / `searchParams` / `cookies()` are async; `middleware.ts` is now `proxy.ts`.
 
 ## Credentials

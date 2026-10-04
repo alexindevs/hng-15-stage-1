@@ -17,6 +17,12 @@ create table if not exists public.products (
   created_at timestamptz not null default now()
 );
 
+-- Listing details used by the storefront filters and cards (added after the first draft; safe to re-run).
+alter table public.products add column if not exists year integer;
+alter table public.products add column if not exists mileage_km integer;
+alter table public.products add column if not exists condition text;
+alter table public.products add column if not exists cutout_url text;  -- transparent PNG/WebP used in the home-page carousel
+
 -- ---------- orders ----------
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
@@ -136,3 +142,85 @@ revoke all on function public.place_order from public, anon, authenticated;
 revoke all on function public.cancel_order from public, anon, authenticated;
 grant execute on function public.place_order to service_role;
 grant execute on function public.cancel_order to service_role;
+
+-- ---------- listing media (extra photos / videos per vehicle) ----------
+-- The storefront shows products.image_url first, then these in sort order. Upload files to a Supabase
+-- Storage bucket (public) and insert rows here until the admin area exists.
+create table if not exists public.listing_media (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references public.products(id) on delete cascade,
+  kind text not null default 'image' check (kind in ('image','video')),
+  url text not null,
+  sort integer not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists listing_media_product_idx on public.listing_media(product_id, sort);
+alter table public.listing_media enable row level security;
+drop policy if exists "listing media is public" on public.listing_media;
+create policy "listing media is public" on public.listing_media for select using (true);
+
+-- ---------- viewing bookings ----------
+create table if not exists public.bookings (
+  id uuid primary key default gen_random_uuid(),
+  reference text unique not null,                          -- e.g. BK-20261005-AB12
+  user_id uuid references auth.users(id) on delete set null,
+  product_id uuid references public.products(id) on delete set null,
+  product_name text not null,                              -- snapshot
+  customer_name text not null,
+  customer_email text not null,
+  customer_phone text not null,
+  slot_start timestamptz not null,                         -- start of a 1-hour viewing slot (Lagos time, UTC+1)
+  notes text,
+  status text not null default 'pending'
+    check (status in ('pending','confirmed','declined','cancelled','completed')),
+  fee_kobo bigint not null default 0 check (fee_kobo >= 0), -- inspection fee
+  fee_option text not null default 'at_viewing' check (fee_option in ('pay_now','at_viewing')),
+  fee_status text not null default 'unpaid' check (fee_status in ('unpaid','paid')),
+  paystack_reference text unique,
+  paid_at timestamptz,
+  email_sent_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists bookings_slot_idx on public.bookings(slot_start);
+create index if not exists bookings_user_idx on public.bookings(user_id);
+alter table public.bookings enable row level security;
+drop policy if exists "users read own bookings" on public.bookings;
+create policy "users read own bookings" on public.bookings for select using (auth.uid() = user_id);
+
+-- Creates a booking unless the slot already holds p_capacity active (pending/confirmed) bookings.
+-- Pending bookings hold their slot until an admin declines or cancels them.
+drop function if exists public.place_booking(uuid,uuid,text,text,text,timestamptz,text,text,bigint,text,integer);
+create or replace function public.place_booking(
+  p_user_id uuid, p_product_id uuid, p_name text, p_email text, p_phone text,
+  p_slot timestamptz, p_notes text, p_reference text, p_fee_kobo bigint, p_fee_option text,
+  p_capacity integer
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+  v_product_name text;
+begin
+  perform pg_advisory_xact_lock(hashtext('booking:' || p_slot::text));
+  if (select count(*) from public.bookings where slot_start = p_slot and status in ('pending','confirmed')) >= p_capacity then
+    raise exception 'SLOT_FULL';
+  end if;
+  select name into v_product_name from public.products where id = p_product_id;
+  if v_product_name is null then raise exception 'PRODUCT_NOT_FOUND'; end if;
+  insert into public.bookings(reference, user_id, product_id, product_name, customer_name, customer_email,
+                              customer_phone, slot_start, notes, fee_kobo, fee_option)
+  values (p_reference, p_user_id, p_product_id, v_product_name, p_name, p_email, p_phone, p_slot, p_notes,
+          p_fee_kobo, p_fee_option)
+  returning id into v_id;
+  return v_id;
+end $$;
+
+revoke all on function public.place_booking from public, anon, authenticated;
+grant execute on function public.place_booking to service_role;
+
+-- ---------- booking status emails ----------
+-- The app emails the customer when a booking becomes confirmed / declined / cancelled. Until the admin area
+-- exists, staff change `status` in the table editor; a Database Webhook tells the app to send the email:
+--   Dashboard -> Database -> Webhooks -> Create: table `bookings`, event `Update`, type HTTP Request,
+--   method POST, URL https://<your-domain>/api/bookings/status,
+--   HTTP header  x-webhook-secret: <same value as BOOKING_WEBHOOK_SECRET in the app's env>.
+alter table public.bookings add column if not exists status_notified text;  -- last status the customer was emailed about

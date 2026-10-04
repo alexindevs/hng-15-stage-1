@@ -1,8 +1,8 @@
-// Placeholder artwork until real product photos are uploaded (see status.md).
+// Product photo, or a monogram when a listing has no image yet.
 export function ProductArt({ name, src }: { name: string; src?: string | null }) {
   if (src) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt={name} className="h-full w-full object-cover" />;
+    return <img src={src} alt={name} loading="lazy" className="h-full w-full object-cover" />;
   }
   const initials = name.split(/\s+/).filter((w) => /^[A-Za-z]/.test(w)).slice(0, 2).map((w) => w[0]).join("");
   return (

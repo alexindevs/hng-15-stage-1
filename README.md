@@ -9,6 +9,8 @@ E-commerce site for Ego Olisa Enterprises, a seller of cars, SUVs, motorcycles a
 - Three payment methods: Paystack (card/online), bank transfer, pay on delivery
 - Google sign-in through Supabase Auth (guest checkout also works)
 - Order confirmation emails through Mailgun
+- Viewing bookings: pick a date and hourly slot, optional NGN 20,000 inspection fee via Paystack, held as pending until approved
+- Landing pages (home with 3D vehicle carousel, about, gallery, contact) and a filterable storefront
 
 ## Stack
 
@@ -35,6 +37,9 @@ Copy `.env.example` to `.env.local` and fill in what you need:
 | `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_FROM`, `MAILGUN_API_BASE`, `SHOP_OWNER_EMAIL` | Order emails |
 | `PAYSTACK_SECRET_KEY` | Paystack payments (the option hides itself when unset) |
 | `BANK_NAME`, `BANK_ACCOUNT_NAME`, `BANK_ACCOUNT_NUMBER` | Bank-transfer details in the email |
+| `INSPECTION_FEE_KOBO`, `BOOKING_SLOT_CAPACITY` | Viewing bookings: fee per viewing (default 2000000 = NGN 20,000) and viewings per slot (default 2) |
+| `BOOKING_WEBHOOK_SECRET` | Shared secret for the Supabase Database Webhook that emails customers when a booking is confirmed or declined (setup in `status.md`) |
+| `NEXT_PUBLIC_CONTACT_PHONE`, `_WHATSAPP`, `_EMAIL`, `_ADDRESS` | Contact details shown on the site (placeholders if blank) |
 
 The secret keys are server-side only. Never commit `.env*` files.
 

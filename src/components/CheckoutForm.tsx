@@ -5,7 +5,8 @@ import { useEffect, useState, useTransition } from "react";
 import { useCart } from "@/components/CartProvider";
 import { createClient } from "@/lib/supabase/client";
 import { formatNaira } from "@/lib/format";
-import { placeOrder } from "@/app/checkout/actions";
+import { PageHeader } from "@/components/PageHeader";
+import { placeOrder } from "@/app/(shop)/checkout/actions";
 
 type Method = "paystack" | "bank_transfer" | "pay_on_delivery";
 
@@ -29,9 +30,9 @@ export function CheckoutForm({ paystack }: { paystack: boolean }) {
   if (!ready) return null;
   if (!lines.length)
     return (
-      <div className="py-20 text-center">
-        <h1 className="font-display text-3xl">Nothing to check out</h1>
-        <Link href="/shop" className="btn-gold mt-6">Browse the shop</Link>
+      <div className="rounded-3xl border border-dashed border-line py-24 text-center">
+        <h1 className="font-display text-4xl">Nothing to check out</h1>
+        <Link href="/shop" className="btn-gold mt-6">Browse vehicles</Link>
       </div>
     );
 
@@ -56,7 +57,7 @@ export function CheckoutForm({ paystack }: { paystack: boolean }) {
   return (
     <div className="grid gap-10 lg:grid-cols-[1fr_360px]">
       <form onSubmit={submit} className="space-y-4">
-        <h1 className="font-display text-4xl">Checkout</h1>
+        <PageHeader eyebrow="Checkout" title="Complete your order" />
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm">Full name
             <input name="name" required className="input mt-1" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label>
@@ -80,7 +81,7 @@ export function CheckoutForm({ paystack }: { paystack: boolean }) {
             ["bank_transfer", "Bank transfer", "We email you our account details. Your order is held once you pay."],
             ["pay_on_delivery", "Pay on delivery / collection", "Pay when you inspect and collect your purchase."],
           ] as [Method, string, string][]).map(([v, title, hint]) => (
-            <label key={v} className={`flex cursor-pointer gap-3 rounded border p-3 ${method === v ? "border-gold bg-gold/5" : "border-line"}`}>
+            <label key={v} className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${method === v ? "border-gold bg-gold/5" : "border-line"}`}>
               <input type="radio" name="payment" className="mt-1 accent-[#d4af37]" checked={method === v} onChange={() => setMethod(v)} />
               <span><span className="block">{title}</span><span className="text-sm text-mute">{hint}</span></span>
             </label>
@@ -89,7 +90,7 @@ export function CheckoutForm({ paystack }: { paystack: boolean }) {
         {error && <p role="alert" className="text-red-400">{error}</p>}
         <button className="btn-gold w-full" disabled={pending}>{pending ? "Please wait…" : method === "paystack" ? `Pay ${formatNaira(totalKobo)}` : `Place order · ${formatNaira(totalKobo)}`}</button>
       </form>
-      <aside className="h-fit border border-line bg-panel p-5">
+      <aside className="h-fit rounded-2xl border border-line bg-panel p-6 lg:sticky lg:top-24">
         <h2 className="font-display text-xl">Order summary</h2>
         <ul className="mt-4 space-y-2 text-sm">
           {lines.map((l) => (

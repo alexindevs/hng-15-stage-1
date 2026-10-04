@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
-import { retryPaystackPayment } from "@/app/checkout/actions";
+import { retryPaystackPayment } from "@/app/(shop)/checkout/actions";
 
 export function PayNowButton({ reference }: { reference: string }) {
   const [pending, start] = useTransition();

@@ -3,6 +3,35 @@
 Last updated: 2026-10-02 (second pass). Branch: `main`.
 Deadline: Friday 11:59 PM WAT.
 
+## Client demo redesign (2026-10-04, in progress)
+The project is now a demo for a real client (scope of work: landing site, storefront, viewing bookings). Redesign in phases.
+
+Phase 1 done (uncommitted at time of writing):
+- New design system: Archivo (variable width/weight) for display, Inter for body; flat gold accent, off-white "paper" sections, pill buttons. Tokens in `src/app/globals.css`.
+- Route groups: `src/app/(site)` = full-bleed landing pages (home now); `src/app/(shop)` = inner pages in a centred container (shop, product, cart, checkout, order(s), login). URLs unchanged.
+- Home page: blurred gold "EGO OLISA" behind a 3D coverflow carousel of background-removed vehicles (`src/components/VehicleCarousel.tsx`: drag/swipe, arrows, keys, dots, autoplay, honours reduced motion), category tiles, "why", latest arrivals, photo band, how-it-works, FAQ, closing CTA. Header/footer/mobile menu restyled; nav list lives in `src/lib/nav.ts`.
+- Catalogue (`src/lib/catalog.json`) rewritten to match the 13 stock photos; new fields `year`, `mileage_km`, `condition`, `image`, `cutout`. **Names, years, mileage and prices are invented placeholders**; models were identified from the photos by eye and are unverified. Schema gained `year`, `mileage_km`, `condition`, `cutout_url` columns; `seed.sql` regenerated.
+- Image pipeline: `assets-originals/` (untouched downloads, read-only) -> `scripts/process-images.mjs` -> `public/vehicles/*.jpg`; `assets-cutouts/` (remove.bg PNGs) -> `scripts/process-cutouts.mjs` -> `public/vehicles/cutouts/*.webp`. Credits in `public/vehicles/CREDITS.md`. BMW and red sedan have no cutout yet; the Bajaj Boxer cutout is not used (cluttered source photo).
+- **To see this against a real Supabase project, re-run `supabase/schema.sql` then `supabase/seed.sql`.** Until the seed is re-run the DB still holds the old rows (no cutouts), so the home carousel is empty. With Supabase env vars unset the site uses the bundled catalogue.
+
+Phase 2 done (2026-10-04, uncommitted at time of writing; type-checks, all routes return 200 with Supabase off, layouts checked at 1440px and 375px):
+- Every page redesigned: shop (category pills + price / year / sort filters in the URL, `src/components/FilterBar.tsx`), product (gallery with photos and videos, spec grid, Book a viewing + Add to cart, related vehicles), cart, checkout, order, orders (now also lists viewings), login. New pages: About, Gallery (lightbox), Contact (form -> Mailgun to `SHOP_OWNER_EMAIL`, honeypot field). Header has a "Book a viewing" button.
+- **Viewing bookings**: `/book` (vehicle -> date and hourly slot -> details -> inspection fee), `/booking/[reference]` status page, `src/lib/booking.ts` (slot rules), `src/lib/bookings.ts` (availability, email, fee settlement), `src/app/(shop)/book/actions.ts`. Mon-Sat, 9:00-16:00 hourly start times, Lagos time, bookable from 12 hours ahead up to 14 days out, 2 viewings per slot (`BOOKING_SLOT_CAPACITY`). Bookings start `pending` and hold their slot. DB: `bookings` table + atomic `place_booking()` (advisory lock, capacity check) in `supabase/schema.sql`.
+- **Inspection fee: NGN 20,000** (`INSPECTION_FEE_KOBO`, default 2000000; 0 = no fee). Customer chooses pay now (Paystack, references start `BK-`, verified server-side, webhook handles both orders and bookings) or pay at the viewing. The confirmation email for a pay-now booking is sent when the payment verifies.
+- Media: `listing_media` table (extra photos/videos per vehicle, public read) is shown on the product page. There is no upload UI yet (no admin): add rows by hand in Supabase.
+- SEO: per-page titles and descriptions, `sitemap.xml`, `robots.txt`. Still to do: submit to Google Search Console after deploy.
+
+**Not tested against a real database or services**: `place_booking()` and the `bookings` / `listing_media` SQL have never run on Postgres; the booking and contact server actions only had their "Supabase missing" error path exercised; Paystack for bookings and the new emails are untested. Re-run `supabase/schema.sql` and `seed.sql`, then place a test booking (with and without paying the fee) and check the `bookings` row, the email and the status page.
+
+Decisions / gaps to confirm with the client:
+- No admin yet, so a booking is approved by changing `status` to `confirmed` / `declined` / `cancelled` in the Supabase table editor. **The customer is emailed automatically** via a Supabase Database Webhook: Dashboard -> Database -> Webhooks -> create one on table `bookings`, event Update, HTTP Request POST to `https://<domain>/api/bookings/status`, with header `x-webhook-secret` = the `BOOKING_WEBHOOK_SECRET` env var (route: `src/app/api/bookings/status/route.ts`). Each status is emailed once (`bookings.status_notified`), a failed send returns 500 so the webhook retries, and the status is re-read from the DB. The route auth and request handling were tested locally; the email templates and the webhook itself were not.
+- Fee policy (decided 2026-10-04): the inspection fee is **non-refundable**. Shown on the booking form, product page, booking page, home FAQ and booking emails (`FEE_POLICY` in `src/lib/site.ts`). Open question: if the shop itself declines a booking after the customer paid, the decline email only says to reply about payment; decide what happens then.
+- Contact details (phone, WhatsApp, email, address, opening hours) are placeholders in `src/lib/site.ts`; override with the `NEXT_PUBLIC_CONTACT_*` env vars. Set `SHOP_OWNER_EMAIL` or the contact form reports "not connected".
+- About, FAQ and "why us" copy is generic wording, not the client's. Opening hours and slot times (Mon-Sat 9-5) are assumptions.
+- Opening hours Mon-Sat 9:00-5:00 and hourly slots 9:00-16:00 confirmed 2026-10-04. Slots are global (not per vehicle) with capacity 2; confirm how the showroom actually works.
+
+Not started: admin area (content, listings, categories, uploads, booking approval); client logo/brand assets (none supplied, header uses a text wordmark); subdomain split (www vs shop; currently one app, `/` is the landing site and `/shop` the store); the remaining cut-outs (BMW, red sedan).
+
 ## Done (code complete, builds clean, all routes return 200 locally without credentials)
 - Black & gold storefront: home, `/shop` (category filter), `/product/[slug]`, `/cart`, `/checkout`, `/order/[reference]`, `/orders`, `/login`
 - Cart (localStorage), server-validated checkout, atomic stock decrement via `place_order()` SQL function
