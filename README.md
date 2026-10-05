@@ -78,3 +78,7 @@ Use a `sk_test_...` key while developing. The return redirect works on localhost
 ## Status and further reading
 
 `status.md` lists what is done, what has not yet been tested against real services, and known gaps. `AGENTS.md` is the handover guide with conventions for anyone continuing the project.
+
+## JSON API (used by the mobile app)
+
+Routes under `src/app/api`: `products`, `cart` (Supabase-backed, needs the `cart_items` table in `supabase/schema.sql`), `checkout`, `orders`, `bookings` (+ `availability`), `contact`, `config`, `auth/google`, `auth/me`. Signed-in endpoints take `Authorization: Bearer <Supabase access token>` (or the site's session cookie). Checkout and bookings also work for guests. The mobile app lives in the `hng-15-stage-2` repo.

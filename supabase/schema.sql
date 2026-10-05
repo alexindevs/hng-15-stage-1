@@ -231,3 +231,22 @@ alter table public.bookings add column if not exists status_notified text;  -- l
 alter table public.bookings drop constraint if exists bookings_fee_option_check;
 alter table public.bookings add constraint bookings_fee_option_check
   check (fee_option in ('pay_now','at_viewing','bank_transfer'));
+
+-- ---------- server-side cart (used by /api/cart and the mobile app) ----------
+-- One row per (user, product). Prices are never stored: they are re-read from products on every read.
+create table if not exists public.cart_items (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  product_id uuid not null references public.products(id) on delete cascade,
+  quantity integer not null check (quantity > 0),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, product_id)
+);
+alter table public.cart_items enable row level security;
+drop policy if exists "users read own cart" on public.cart_items;
+create policy "users read own cart" on public.cart_items for select using (auth.uid() = user_id);
+drop policy if exists "users insert own cart" on public.cart_items;
+create policy "users insert own cart" on public.cart_items for insert with check (auth.uid() = user_id);
+drop policy if exists "users update own cart" on public.cart_items;
+create policy "users update own cart" on public.cart_items for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "users delete own cart" on public.cart_items;
+create policy "users delete own cart" on public.cart_items for delete using (auth.uid() = user_id);
