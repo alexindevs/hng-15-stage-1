@@ -21,7 +21,11 @@ export async function authenticate(req: NextRequest): Promise<Ok | NextResponse>
       })
     : await createCookieClient();
   const { data, error } = token ? await sb.auth.getUser(token) : await sb.auth.getUser();
-  if (error || !data.user) return err("Not signed in.", 401);
+  if (error || !data.user) {
+    // Say why (expired / malformed token, user from another project, ...) so a failing client can be diagnosed.
+    const why = error?.message ?? (token ? "token accepted but no user returned" : "no token or session cookie sent");
+    return err(`Not signed in (${why}).`, 401);
+  }
   return { sb, user: data.user };
 }
 
