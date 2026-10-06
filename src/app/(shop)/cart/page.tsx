@@ -1,11 +1,17 @@
 "use client";
 import Link from "next/link";
+import { useEffect } from "react";
 import { useCart } from "@/components/CartProvider";
 import { PageHeader } from "@/components/PageHeader";
 import { formatNaira } from "@/lib/format";
 
 export default function CartPage() {
-  const { lines, totalKobo, setQty, remove, ready } = useCart();
+  const { lines, totalKobo, setQty, remove, ready, refresh } = useCart();
+  // Safety net on top of the websocket: re-read the account cart every 5 seconds while this page is open.
+  useEffect(() => {
+    const t = setInterval(refresh, 5000);
+    return () => clearInterval(t);
+  }, [refresh]);
   if (!ready) return null;
   if (!lines.length)
     return (

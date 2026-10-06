@@ -250,3 +250,21 @@ drop policy if exists "users update own cart" on public.cart_items;
 create policy "users update own cart" on public.cart_items for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 drop policy if exists "users delete own cart" on public.cart_items;
 create policy "users delete own cart" on public.cart_items for delete using (auth.uid() = user_id);
+
+-- ---------- realtime cart sync ----------
+-- Every change to cart_items broadcasts a small "cart_changed" message on the private channel cart:<user_id>.
+-- Only that user may receive it (policy below), and the message carries no cart data: clients re-read /api/cart.
+create or replace function public.cart_items_broadcast() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform realtime.send(jsonb_build_object('at', now()), 'cart_changed', 'cart:' || coalesce(new.user_id, old.user_id)::text, true);
+  return null;
+end $$;
+drop trigger if exists cart_items_broadcast on public.cart_items;
+create trigger cart_items_broadcast after insert or update or delete on public.cart_items
+  for each row execute function public.cart_items_broadcast();
+
+drop policy if exists "users receive own cart events" on realtime.messages;
+create policy "users receive own cart events" on realtime.messages
+  for select to authenticated
+  using (realtime.topic() = 'cart:' || (select auth.uid())::text);

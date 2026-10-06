@@ -11,6 +11,8 @@ type Ctx = {
   setQty: (slug: string, qty: number) => void;
   remove: (slug: string) => void;
   clear: () => void;
+  /** Re-read the account cart now (used for polling on the cart page). No-op for guests. */
+  refresh: () => Promise<void>;
   ready: boolean;
 };
 const CartCtx = createContext<Ctx | null>(null);
@@ -36,7 +38,7 @@ async function api(method: "GET" | "PUT", items?: { slug: string; quantity: numb
 /**
  * Cart in React context + localStorage (guests). When signed in, the cart is also stored in Supabase through /api/cart
  * (the same endpoint the mobile app uses): the device cart is merged into the account cart on sign-in, every edit is
- * pushed, and the account cart is re-read when the tab regains focus so changes made on the phone show up here.
+ * pushed, and a websocket broadcast (plus 5-second polling on the cart page) brings in changes made on the phone.
  */
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -48,6 +50,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const synced = useRef(false); // initial merge with the account cart finished
   const skipPush = useRef(false); // next lines change came from the server; do not echo it back
   const version = useRef(0); // bumps on every local edit so stale responses are ignored
+  const pending = useRef(false); // a local edit has not been saved yet; do not overwrite it with a server read
 
   useEffect(() => {
     try {
@@ -106,42 +109,66 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
     if (!synced.current) return;
     const v = ++version.current;
+    pending.current = true;
     const t = setTimeout(async () => {
       try {
         const result = await api("PUT", linesRef.current.map((l) => ({ slug: l.slug, quantity: l.quantity })));
         if (v !== version.current) return;
+        pending.current = false;
         skipPush.current = true;
         setLines(fromServer(result));
-      } catch {}
+      } catch {
+        if (v === version.current) pending.current = false;
+      }
     }, 300);
     return () => clearTimeout(t);
   }, [lines, ready, userId]);
 
-  // Pick up changes made elsewhere (the phone) when this tab becomes visible again, and every 20 seconds while open.
+  // Re-read the account cart. Skipped while a local edit is waiting to be saved so it can never be overwritten.
+  const refresh = useCallback(async () => {
+    if (!synced.current || pending.current) return;
+    const v = version.current;
+    try {
+      const next = fromServer(await api("GET"));
+      if (v !== version.current || pending.current) return;
+      const key = (ls: CartLine[]) => JSON.stringify(ls.map((l) => [l.slug, l.quantity]));
+      if (key(next) !== key(linesRef.current)) {
+        skipPush.current = true;
+        setLines(next);
+      }
+    } catch {}
+  }, []);
+
+  // Live updates: the database broadcasts "cart_changed" on a private channel only this user can join (websocket).
+  // Also refresh when the tab regains focus. The cart page adds 5-second polling on top as a safety net.
   useEffect(() => {
-    if (!ready || !userId) return;
-    const refresh = async () => {
-      if (!synced.current || document.visibilityState !== "visible") return;
-      const v = version.current;
-      try {
-        const server = await api("GET");
-        if (v !== version.current) return; // edited locally while loading
-        const next = fromServer(server);
-        if (JSON.stringify(next.map((l) => [l.slug, l.quantity])) !== JSON.stringify(linesRef.current.map((l) => [l.slug, l.quantity]))) {
-          skipPush.current = true;
-          setLines(next);
-        }
-      } catch {}
-    };
-    const timer = setInterval(refresh, 20_000);
-    document.addEventListener("visibilitychange", refresh);
-    window.addEventListener("focus", refresh);
+    if (!ready || !userId || !process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+    const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let debounce: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+    (async () => {
+      await supabase.realtime.setAuth();
+      if (cancelled) return;
+      channel = supabase
+        .channel(`cart:${userId}`, { config: { private: true } })
+        .on("broadcast", { event: "cart_changed" }, () => {
+          clearTimeout(debounce);
+          debounce = setTimeout(refresh, 150);
+        })
+        .subscribe();
+    })();
+    const onFocus = () => document.visibilityState === "visible" && refresh();
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
     return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", refresh);
-      window.removeEventListener("focus", refresh);
+      cancelled = true;
+      clearTimeout(debounce);
+      if (channel) supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
     };
-  }, [ready, userId]);
+  }, [ready, userId, refresh]);
 
   const add = useCallback<Ctx["add"]>((l, qty = 1) => {
     setLines((cur) => {
@@ -168,8 +195,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       setQty,
       remove,
       clear,
+      refresh,
     }),
-    [lines, ready, add, setQty, remove, clear],
+    [lines, ready, add, setQty, remove, clear, refresh],
   );
   return <CartCtx.Provider value={value}>{children}</CartCtx.Provider>;
 }
