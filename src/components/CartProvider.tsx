@@ -23,12 +23,14 @@ type ServerCart = {
 };
 const fromServer = (c: ServerCart): CartLine[] =>
   c.items.map((i) => ({ slug: i.slug, name: i.name, price_kobo: i.price_kobo, category: i.category, quantity: i.quantity, max: i.stock }));
+const sameCart = (a: CartLine[], b: CartLine[]) =>
+  JSON.stringify(a.map((l) => [l.slug, l.quantity])) === JSON.stringify(b.map((l) => [l.slug, l.quantity]));
 
-async function api(method: "GET" | "PUT", items?: { slug: string; quantity: number }[]): Promise<ServerCart> {
-  const res = await fetch("/api/cart", {
+async function call(method: "GET" | "PUT" | "POST" | "PATCH" | "DELETE", path = "", body?: unknown): Promise<ServerCart> {
+  const res = await fetch(`/api/cart${path}`, {
     method,
     headers: { "Content-Type": "application/json" },
-    body: items ? JSON.stringify({ items }) : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`cart ${res.status}`);
@@ -36,9 +38,12 @@ async function api(method: "GET" | "PUT", items?: { slug: string; quantity: numb
 }
 
 /**
- * Cart in React context + localStorage (guests). When signed in, the cart is also stored in Supabase through /api/cart
- * (the same endpoint the mobile app uses): the device cart is merged into the account cart on sign-in, every edit is
- * pushed, and a websocket broadcast (plus 5-second polling on the cart page) brings in changes made on the phone.
+ * Cart in React context + localStorage (guests). When signed in, the cart also lives in Supabase through /api/cart
+ * (the endpoint the mobile app uses):
+ *  - on sign-in the device cart is merged into the account cart (higher quantity wins);
+ *  - every edit is sent as a per-item operation (add / set quantity / remove / clear), in order, so edits made on
+ *    different devices combine instead of overwriting each other;
+ *  - a websocket broadcast tells this tab when the cart changed elsewhere; the cart page also polls every 5 seconds.
  */
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -48,9 +53,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const linesRef = useRef(lines);
   linesRef.current = lines;
   const synced = useRef(false); // initial merge with the account cart finished
-  const skipPush = useRef(false); // next lines change came from the server; do not echo it back
-  const version = useRef(0); // bumps on every local edit so stale responses are ignored
-  const pending = useRef(false); // a local edit has not been saved yet; do not overwrite it with a server read
+  const inflight = useRef(0); // queued/running operations; while > 0 server reads are ignored
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     try {
@@ -75,69 +79,66 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // Sign-in: merge the device cart with the account cart (higher quantity wins), save it, adopt the server's version.
+  const userRef = useRef(userId);
+  userRef.current = userId;
+  const syncing = useRef(false);
+
+  // Merge the device cart with the account cart (higher quantity wins), save it, adopt the server's version.
+  // Retried by refresh() until it succeeds (e.g. after a network error).
+  const initialSync = useCallback(async () => {
+    const uid = userRef.current;
+    if (!uid || syncing.current) return;
+    syncing.current = true;
+    try {
+      const server = await call("GET");
+      const merged = new Map<string, number>();
+      for (const i of server.items) merged.set(i.slug, i.quantity);
+      for (const l of linesRef.current) merged.set(l.slug, Math.max(merged.get(l.slug) ?? 0, l.quantity));
+      const result = await call("PUT", "", { items: [...merged].map(([slug, quantity]) => ({ slug, quantity })) });
+      if (userRef.current !== uid) return;
+      setLines(fromServer(result));
+      synced.current = true;
+    } catch {
+      // keep the device cart; the next refresh retries
+    } finally {
+      syncing.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     synced.current = false;
-    if (!ready || !userId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const server = await api("GET");
-        const merged = new Map<string, number>();
-        for (const i of server.items) merged.set(i.slug, i.quantity);
-        for (const l of linesRef.current) merged.set(l.slug, Math.max(merged.get(l.slug) ?? 0, l.quantity));
-        const result = await api("PUT", [...merged].map(([slug, quantity]) => ({ slug, quantity })));
-        if (cancelled) return;
-        skipPush.current = true;
-        setLines(fromServer(result));
-        synced.current = true;
-      } catch {
-        // offline or API error: keep the device cart; the next edit retries
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [ready, userId]);
+    if (ready && userId) initialSync();
+  }, [ready, userId, initialSync]);
 
-  // Push every local edit (debounced); the server's answer carries current prices and stock caps.
-  useEffect(() => {
-    if (!ready || !userId) return;
-    if (skipPush.current) {
-      skipPush.current = false;
+  /** Sends one operation after all earlier ones; when the queue drains, adopts the server's answer. */
+  const enqueue = useCallback((op: () => Promise<ServerCart>) => {
+    if (!synced.current) return;
+    inflight.current += 1;
+    chain.current = chain.current.then(async () => {
+      let result: ServerCart | null = null;
+      try {
+        result = await op();
+      } catch {
+        // keep the optimistic local state; the next refresh reconciles with the server
+      }
+      inflight.current -= 1;
+      if (inflight.current === 0 && result) setLines(fromServer(result));
+    });
+  }, []);
+
+  // Re-read the account cart. Skipped while local edits are still being saved so they cannot be overwritten.
+  const refresh = useCallback(async () => {
+    if (!synced.current) {
+      initialSync(); // earlier sync failed or has not run yet: try again
       return;
     }
-    if (!synced.current) return;
-    const v = ++version.current;
-    pending.current = true;
-    const t = setTimeout(async () => {
-      try {
-        const result = await api("PUT", linesRef.current.map((l) => ({ slug: l.slug, quantity: l.quantity })));
-        if (v !== version.current) return;
-        pending.current = false;
-        skipPush.current = true;
-        setLines(fromServer(result));
-      } catch {
-        if (v === version.current) pending.current = false;
-      }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [lines, ready, userId]);
-
-  // Re-read the account cart. Skipped while a local edit is waiting to be saved so it can never be overwritten.
-  const refresh = useCallback(async () => {
-    if (!synced.current || pending.current) return;
-    const v = version.current;
+    if (inflight.current > 0) return;
     try {
-      const next = fromServer(await api("GET"));
-      if (v !== version.current || pending.current) return;
-      const key = (ls: CartLine[]) => JSON.stringify(ls.map((l) => [l.slug, l.quantity]));
-      if (key(next) !== key(linesRef.current)) {
-        skipPush.current = true;
-        setLines(next);
-      }
+      const next = fromServer(await call("GET"));
+      if (inflight.current > 0) return;
+      if (!sameCart(next, linesRef.current)) setLines(next);
     } catch {}
-  }, []);
+  }, [initialSync]);
 
   // Live updates: the database broadcasts "cart_changed" on a private channel only this user can join (websocket).
   // Also refresh when the tab regains focus. The cart page adds 5-second polling on top as a safety net.
@@ -170,20 +171,37 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
   }, [ready, userId, refresh]);
 
-  const add = useCallback<Ctx["add"]>((l, qty = 1) => {
-    setLines((cur) => {
-      const found = cur.find((x) => x.slug === l.slug);
-      if (found) return cur.map((x) => (x.slug === l.slug ? { ...x, quantity: Math.min(x.quantity + qty, l.max) } : x));
-      return [...cur, { ...l, quantity: Math.min(qty, l.max) }];
-    });
-  }, []);
-  const setQty = useCallback((slug: string, qty: number) => {
-    setLines((cur) =>
-      cur.flatMap((x) => (x.slug !== slug ? [x] : qty <= 0 ? [] : [{ ...x, quantity: Math.min(qty, x.max) }])),
-    );
-  }, []);
-  const remove = useCallback((slug: string) => setLines((c) => c.filter((x) => x.slug !== slug)), []);
-  const clear = useCallback(() => setLines([]), []);
+  const add = useCallback<Ctx["add"]>(
+    (l, qty = 1) => {
+      setLines((cur) => {
+        const found = cur.find((x) => x.slug === l.slug);
+        if (found) return cur.map((x) => (x.slug === l.slug ? { ...x, quantity: Math.min(x.quantity + qty, l.max) } : x));
+        return [...cur, { ...l, quantity: Math.min(qty, l.max) }];
+      });
+      enqueue(() => call("POST", "", { slug: l.slug, quantity: qty }));
+    },
+    [enqueue],
+  );
+  const setQty = useCallback(
+    (slug: string, qty: number) => {
+      setLines((cur) =>
+        cur.flatMap((x) => (x.slug !== slug ? [x] : qty <= 0 ? [] : [{ ...x, quantity: Math.min(qty, x.max) }])),
+      );
+      enqueue(() => call("PATCH", `/${encodeURIComponent(slug)}`, { quantity: Math.max(0, qty) }));
+    },
+    [enqueue],
+  );
+  const remove = useCallback(
+    (slug: string) => {
+      setLines((c) => c.filter((x) => x.slug !== slug));
+      enqueue(() => call("DELETE", `/${encodeURIComponent(slug)}`));
+    },
+    [enqueue],
+  );
+  const clear = useCallback(() => {
+    setLines([]);
+    enqueue(() => call("DELETE"));
+  }, [enqueue]);
 
   const value = useMemo<Ctx>(
     () => ({
