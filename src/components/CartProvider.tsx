@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { ApiError, backoffMs, withRetry } from "@/lib/retry";
 
 export type CartLine = { slug: string; name: string; price_kobo: number; category: string; quantity: number; max: number };
 type Ctx = {
@@ -33,7 +34,7 @@ async function call(method: "GET" | "PUT" | "POST" | "PATCH" | "DELETE", path = 
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`cart ${res.status}`);
+  if (!res.ok) throw new ApiError(`cart ${res.status}`, res.status);
   return res.json();
 }
 
@@ -82,24 +83,29 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const userRef = useRef(userId);
   userRef.current = userId;
   const syncing = useRef(false);
+  const failures = useRef(0); // consecutive failed first-sync attempts (drives the backoff)
+  const nextTryAt = useRef(0); // earliest time the first sync may be retried (exponential backoff with jitter)
 
   // Merge the device cart with the account cart (higher quantity wins), save it, adopt the server's version.
   // Retried by refresh() until it succeeds (e.g. after a network error).
   const initialSync = useCallback(async () => {
     const uid = userRef.current;
-    if (!uid || syncing.current) return;
+    if (!uid || syncing.current || Date.now() < nextTryAt.current) return;
     syncing.current = true;
     try {
-      const server = await call("GET");
+      const server = await withRetry(() => call("GET"));
       const merged = new Map<string, number>();
       for (const i of server.items) merged.set(i.slug, i.quantity);
       for (const l of linesRef.current) merged.set(l.slug, Math.max(merged.get(l.slug) ?? 0, l.quantity));
-      const result = await call("PUT", "", { items: [...merged].map(([slug, quantity]) => ({ slug, quantity })) });
+      const result = await withRetry(() => call("PUT", "", { items: [...merged].map(([slug, quantity]) => ({ slug, quantity })) }));
       if (userRef.current !== uid) return;
+      failures.current = 0;
+      nextTryAt.current = 0;
       setLines(fromServer(result));
       synced.current = true;
     } catch {
-      // keep the device cart; the next refresh retries
+      // keep the device cart; refresh() retries after an exponential backoff with jitter
+      if (userRef.current === uid) nextTryAt.current = Date.now() + backoffMs(failures.current++, 1000, 60_000);
     } finally {
       syncing.current = false;
     }
@@ -107,6 +113,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     synced.current = false;
+    failures.current = 0;
+    nextTryAt.current = 0;
     if (ready && userId) initialSync();
   }, [ready, userId, initialSync]);
 
@@ -117,7 +125,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     chain.current = chain.current.then(async () => {
       let result: ServerCart | null = null;
       try {
-        result = await op();
+        result = await withRetry(op); // transient failures retry with exponential backoff + jitter, keeping order
       } catch {
         // keep the optimistic local state; the next refresh reconciles with the server
       }
